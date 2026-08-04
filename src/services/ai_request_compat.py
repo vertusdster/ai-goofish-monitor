@@ -109,9 +109,12 @@ def build_ai_request_params(
     temperature: float | None = None,
     max_output_tokens: int | None = None,
     enable_json_output: bool = False,
+    reasoning_effort: str | None = None,
 ) -> Dict[str, Any]:
     """根据 API 模式构建请求参数。"""
     request_params = {"model": model}
+    if reasoning_effort is not None:
+        request_params["reasoning_effort"] = reasoning_effort
     if api_mode == RESPONSES_API_MODE:
         request_params["input"] = build_responses_input(messages)
         if max_output_tokens is not None:

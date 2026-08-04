@@ -24,6 +24,7 @@ from src.config import (
     TASK_IMAGE_DIR_PREFIX,
     MODEL_NAME,
     VISION_MODEL_NAME,
+    REASONING_EFFORT,
     ENABLE_RESPONSE_FORMAT,
     client,
 )
@@ -398,6 +399,7 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
                 temperature=current_temperature,
                 max_output_tokens=4000,
                 enable_json_output=use_response_format,
+                reasoning_effort=REASONING_EFFORT,
             )
             if not use_temperature:
                 request_params = remove_temperature_param(request_params)

@@ -26,6 +26,8 @@ BASE_URL = os.getenv("OPENAI_BASE_URL")
 MODEL_NAME = os.getenv("OPENAI_MODEL_NAME")
 # 视觉模型 (含图片消息时使用; 未设置时回退到主模型, 保持向后兼容)
 VISION_MODEL_NAME = os.getenv("VISION_MODEL_NAME") or MODEL_NAME
+# 推理强度 (reasoning_effort, 如 luna 的 high; 未设置时不发送)
+REASONING_EFFORT = os.getenv("REASONING_EFFORT") or None
 PROXY_URL = os.getenv("PROXY_URL")
 NTFY_TOPIC_URL = os.getenv("NTFY_TOPIC_URL")
 GOTIFY_URL = os.getenv("GOTIFY_URL")
