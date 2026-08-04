@@ -23,6 +23,7 @@ from src.config import (
     IMAGE_SAVE_DIR,
     TASK_IMAGE_DIR_PREFIX,
     MODEL_NAME,
+    VISION_MODEL_NAME,
     ENABLE_RESPONSE_FORMAT,
     client,
 )
@@ -380,9 +381,19 @@ async def get_ai_analysis(product_data, image_paths=None, prompt_text=""):
 
             from src.config import get_ai_request_params
 
+            # 消息含图片时使用视觉模型, 否则用主模型
+            def _has_images(msgs):
+                for m in msgs:
+                    c = m.get("content")
+                    if isinstance(c, list):
+                        for part in c:
+                            if isinstance(part, dict) and part.get("type") == "image_url":
+                                return True
+                return False
+
             request_params = build_ai_request_params(
                 api_mode,
-                model=MODEL_NAME,
+                model=VISION_MODEL_NAME if _has_images(messages) else MODEL_NAME,
                 messages=messages,
                 temperature=current_temperature,
                 max_output_tokens=4000,

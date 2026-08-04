@@ -24,6 +24,8 @@ DETAIL_API_URL_PATTERN = "h5api.m.goofish.com/h5/mtop.taobao.idle.pc.detail"
 API_KEY = os.getenv("OPENAI_API_KEY")
 BASE_URL = os.getenv("OPENAI_BASE_URL")
 MODEL_NAME = os.getenv("OPENAI_MODEL_NAME")
+# 视觉模型 (含图片消息时使用; 未设置时回退到主模型, 保持向后兼容)
+VISION_MODEL_NAME = os.getenv("VISION_MODEL_NAME") or MODEL_NAME
 PROXY_URL = os.getenv("PROXY_URL")
 NTFY_TOPIC_URL = os.getenv("NTFY_TOPIC_URL")
 GOTIFY_URL = os.getenv("GOTIFY_URL")
