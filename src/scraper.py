@@ -329,7 +329,16 @@ def _build_context_overrides(snapshot: dict) -> dict:
 def _build_extra_headers(raw_headers: Optional[dict]) -> dict:
     if not raw_headers:
         return {}
-    excluded = {"cookie", "content-length"}
+    # 浏览器自动管理的 header 不能通过 extra_http_headers 注入:
+    # Chromium 会拒绝整个请求 (ERR_INVALID_ARGUMENT), 导致页面资源全部加载失败,
+    # 页面 JS 永远不执行 -> mtop 搜索接口永不响应 -> 30s 超时 (2026-08-06 实测)
+    excluded = {
+        "cookie", "content-length", "host", "connection", "upgrade",
+        "sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user",
+        "referer", "referrer", "sec-ch-ua", "sec-ch-ua-mobile", "sec-ch-ua-platform",
+        "accept-encoding", "te", "transfer-encoding", "trailer",
+        "proxy-authorization", "proxy-connection", "range",
+    }
     headers = {}
     for key, value in raw_headers.items():
         if not key or key.lower() in excluded or value is None:
