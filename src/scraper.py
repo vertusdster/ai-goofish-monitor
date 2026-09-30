@@ -67,6 +67,28 @@ class RiskControlError(Exception):
     pass
 
 
+# 阿里风控在 mtop 响应里返回的 ret 标记。命中即表示请求被风控拦截、
+# 商品数据不会下发 —— 与"登录态失效"和"空结果"必须区分开。
+RISK_RET_MARKERS = ("RGV587_ERROR", "FAIL_SYS_USER_VALIDATE")
+
+
+def is_risk_ret(ret_text: str) -> bool:
+    """判断 mtop 响应的 ret 字段是否是风控拒绝。"""
+    return any(marker in (ret_text or "") for marker in RISK_RET_MARKERS)
+
+
+async def extract_mtop_ret(response) -> str:
+    """从已捕获的响应里取 mtop ret 字段, 失败时返回空串。"""
+    try:
+        payload = await response.json()
+    except Exception:
+        return ""
+    ret = payload.get("ret")
+    if isinstance(ret, (list, tuple)):
+        return "; ".join(str(x) for x in ret)[:200]
+    return str(ret or "")[:200]
+
+
 class LoginRequiredError(Exception):
     """Raised when Goofish redirects to the passport/mini_login flow."""
 
@@ -702,12 +724,20 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                         "\n==================== CRITICAL BLOCK DETECTED ===================="
                     )
                     print("检测到闲鱼反爬虫验证弹窗 (baxia-dialog)，无法继续操作。")
+                    search_ret = await extract_mtop_ret(initial_response)
+                    if search_ret:
+                        print(f"本次搜索接口返回: {search_ret}")
                     print("这通常是因为操作过于频繁或被识别为机器人。")
+                    if is_risk_ret(search_ret):
+                        print(
+                            "判定: 服务端风控拒绝(与弹窗无关), 商品数据未下发 —— 不一定需要看登录态, 也可能与出口 IP/访问频率有关。"
+                        )
                     print("建议：")
                     print("1. 停止脚本一段时间再试。")
                     print(
-                        "2. (推荐) 在 .env 文件中设置 RUN_HEADLESS=false，以非无头模式运行，这有助于绕过检测。"
+                        "2. 更新登录状态文件(登录态过期会退化为匿名访问, 最易被风控拦截)。"
                     )
+                    print("3. 更换出口 IP / 降低任务执行频率。")
                     print(f"任务 '{keyword}' 将在此处中止。")
                     print(
                         "==================================================================="
@@ -1001,12 +1031,12 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                                 ret_string = str(
                                     await safe_get(detail_json, "ret", default=[])
                                 )
-                                if "FAIL_SYS_USER_VALIDATE" in ret_string:
+                                if is_risk_ret(ret_string):
                                     print(
                                         "\n==================== CRITICAL BLOCK DETECTED ===================="
                                     )
                                     print(
-                                        "检测到闲鱼反爬虫验证 (FAIL_SYS_USER_VALIDATE)，程序将终止。"
+                                        f"检测到闲鱼反爬虫验证/风控拒绝 (ret={ret_string.strip()[:120]})，程序将终止。"
                                     )
                                     long_sleep_duration = random.randint(3, 60)
                                     print(
