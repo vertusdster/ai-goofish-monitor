@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import random
+import sys
 from datetime import datetime
 from typing import Optional
 from urllib.parse import urlencode
@@ -268,19 +269,58 @@ def _get_seller_profile_cache_ttl(task_config: dict) -> int:
     return max(0, _as_int(configured, default))
 
 
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
+MOBILE_VIEWPORT = {"width": 412, "height": 915}
+DESKTOP_VIEWPORT = {"width": 1440, "height": 900}
+
+
 def _default_context_options() -> dict:
-    return {
-        "user_agent": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36",
-        "viewport": {"width": 412, "height": 915},
-        "device_scale_factor": 2.625,
-        "is_mobile": True,
-        "has_touch": True,
+    """默认浏览器上下文（UA 必须与真实运行环境自洽）。
+
+    2026-10-02 实测：容器内 Chromium 跑在 Linux x86_64 + SwiftShader（无 GPU），
+    却声明 "Android 6.0 Nexus 5" 这种 2015 年的移动 UA，会被闲鱼判为异常并整站
+    重定向到 passport 登录页（mtop 返回 FAIL_SYS_SESSION_EXPIRED），但同一份 cookie
+    直连 mtop 接口却返回 SUCCESS::调用成功。三组对照实验（同 cookie）：
+      Nexus5 UA + 移动视口 -> 跳登录、0 商品
+      桌面 Chrome UA + 桌面视口 -> 正常
+      桌面 Chrome UA + 移动视口 -> 正常
+    故默认改为桌面 Chrome UA；移动 UA 仍可通过 BROWSER_USER_AGENT 显式指定。
+    """
+    ua = (os.getenv("BROWSER_USER_AGENT") or DEFAULT_USER_AGENT).strip()
+    is_mobile = _looks_like_mobile(ua)
+    if is_mobile is None:
+        is_mobile = False
+    options = {
+        "user_agent": ua,
         "locale": "zh-CN",
         "timezone_id": "Asia/Shanghai",
         "permissions": ["geolocation"],
         "geolocation": {"longitude": 121.4737, "latitude": 31.2304},
         "color_scheme": "light",
     }
+    if is_mobile:
+        options.update(
+            {
+                "viewport": dict(MOBILE_VIEWPORT),
+                "device_scale_factor": 2.625,
+                "is_mobile": True,
+                "has_touch": True,
+            }
+        )
+    else:
+        options.update(
+            {
+                "viewport": dict(DESKTOP_VIEWPORT),
+                "device_scale_factor": 1,
+                "is_mobile": False,
+                "has_touch": False,
+            }
+        )
+    return options
 
 
 def _clean_kwargs(options: dict) -> dict:
@@ -1208,8 +1248,13 @@ async def scrape_xianyu(task_config: dict, debug_limit: int = 0):
                     await analysis_dispatcher.join()
                 log_time("任务执行完毕，浏览器将在5秒后自动关闭...")
                 await asyncio.sleep(5)
-                if debug_limit:
-                    input("按回车键关闭浏览器...")
+                if debug_limit and sys.stdin is not None and sys.stdin.isatty():
+                    # 非 TTY（容器 cron / docker exec / CI）下 input() 会抛 EOFError，
+                    # 被外层捕获成「本次尝试失败」并触发无意义的账号轮换重试（2026-10-02 实测）。
+                    try:
+                        input("按回车键关闭浏览器...")
+                    except EOFError:
+                        log_time("非交互环境，跳过等待回车。")
                 await browser.close()
 
         return processed_item_count
